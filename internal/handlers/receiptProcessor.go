@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,7 +33,7 @@ type ReceiptResponse struct {
 	ID      string `json:"id"`
 }
 
-var receiptPoints = make(map[string]int)
+var receiptPoints sync.Map
 
 func ProcessReceipt(w http.ResponseWriter, r *http.Request) {
 	var receiptReq ReceiptRequest
@@ -49,7 +50,7 @@ func ProcessReceipt(w http.ResponseWriter, r *http.Request) {
 	points := calculatePoints(receiptReq)
 
 	// Store the points in memory
-	receiptPoints[receiptID] = points
+	receiptPoints.Store(receiptID, points)
 
 	// Process the receipt (this is just a placeholder for actual processing logic)
 	response := ReceiptResponse{
@@ -67,7 +68,7 @@ func GetReceiptPoints(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	receiptID := vars["id"]
 
-	points, exists := receiptPoints[receiptID]
+	points, exists := receiptPoints.Load(receiptID)
 	if !exists {
 		http.Error(w, "Receipt not found", http.StatusNotFound)
 		return
@@ -84,9 +85,15 @@ func GetReceiptPoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetAllReceiptPoints(w http.ResponseWriter, r *http.Request) {
+	allPoints := make(map[string]int)
+	receiptPoints.Range(func(key, value interface{}) bool {
+		allPoints[key.(string)] = value.(int)
+		return true
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(receiptPoints)
+	json.NewEncoder(w).Encode(allPoints)
 }
 
 func calculatePoints(receipt ReceiptRequest) int {
